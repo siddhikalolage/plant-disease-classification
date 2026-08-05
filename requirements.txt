@@ -3,5 +3,7 @@ tensorflow
 opencv-python
 numpy
 pillow
+matplotlib
+scikit-learn
 pytest
 nbformat
