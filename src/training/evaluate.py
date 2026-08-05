@@ -25,8 +25,10 @@ def build_evaluation_generator(
     image_size=(224, 224),
     batch_size=32,
     shuffle=False,
+    preprocessing_function=None,
 ):
-    datagen = ImageDataGenerator(rescale=1.0 / 255.0)
+    datagen_kwargs = {'preprocessing_function': preprocessing_function} if preprocessing_function is not None else {'rescale': 1.0 / 255.0}
+    datagen = ImageDataGenerator(**datagen_kwargs)
     generator = datagen.flow_from_directory(
         data_dir,
         target_size=image_size,

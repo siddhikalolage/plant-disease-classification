@@ -4,10 +4,13 @@ from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping
 from tensorflow.keras.applications import EfficientNetB0, MobileNetV3Small, MobileNetV3Large
 
+from src.constants import NUM_CLASSES
 
-def build_training_generators(train_dir, valid_dir, image_size=(224, 224), batch_size=32):
-    train_datagen = ImageDataGenerator(rescale=1.0 / 255.0)
-    valid_datagen = ImageDataGenerator(rescale=1.0 / 255.0)
+
+def build_training_generators(train_dir, valid_dir, image_size=(224, 224), batch_size=32, preprocessing_function=None):
+    datagen_kwargs = {'preprocessing_function': preprocessing_function} if preprocessing_function is not None else {'rescale': 1.0 / 255.0}
+    train_datagen = ImageDataGenerator(**datagen_kwargs)
+    valid_datagen = ImageDataGenerator(**datagen_kwargs)
 
     train_generator = train_datagen.flow_from_directory(
         train_dir,
@@ -26,7 +29,7 @@ def build_training_generators(train_dir, valid_dir, image_size=(224, 224), batch
     return train_generator, valid_generator
 
 
-def build_baseline_cnn_model(num_classes: int, input_shape=(224, 224, 3), dropout_rate: float = 0.5):
+def build_baseline_cnn_model(num_classes: int = NUM_CLASSES, input_shape=(224, 224, 3), dropout_rate: float = 0.5):
     model = tf.keras.Sequential([
         layers.Input(shape=input_shape),
         layers.Conv2D(32, (3, 3), activation='relu', padding='same'),
@@ -46,7 +49,7 @@ def build_baseline_cnn_model(num_classes: int, input_shape=(224, 224, 3), dropou
     return model
 
 
-def build_efficientnetb0_model(num_classes: int, input_shape=(224, 224, 3), dropout_rate: float = 0.3, trainable: bool = False):
+def build_efficientnetb0_model(num_classes: int = NUM_CLASSES, input_shape=(224, 224, 3), dropout_rate: float = 0.3, trainable: bool = False):
     base_model = EfficientNetB0(
         weights='imagenet',
         include_top=False,
@@ -63,7 +66,7 @@ def build_efficientnetb0_model(num_classes: int, input_shape=(224, 224, 3), drop
     return model
 
 
-def build_mobilenetv3_model(num_classes: int, input_shape=(224, 224, 3), dropout_rate: float = 0.3, trainable: bool = False, model_type: str = 'small'):
+def build_mobilenetv3_model(num_classes: int = NUM_CLASSES, input_shape=(224, 224, 3), dropout_rate: float = 0.3, trainable: bool = False, model_type: str = 'small'):
     model_type = model_type.lower()
     if model_type == 'small':
         base_model = MobileNetV3Small(

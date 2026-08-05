@@ -1,7 +1,7 @@
 import streamlit as st
 from PIL import Image
 
-from app.predictor import get_cached_model, load_model, predict_with_gradcam
+from app.predictor import load_model, predict_with_gradcam
 from app.utils import get_asset_path
 from src.training.evaluate import (
     build_evaluation_generator,
@@ -64,7 +64,7 @@ elif app_mode == 'Disease Recognition':
             st.write('### Prediction')
             try:
                 model = get_cached_model()
-                _, confidence, top_predictions = predict_with_confidence(uploaded_image, model=model)
+                _, top_confidence, top_predictions, gradcam_overlay = predict_with_gradcam(uploaded_image, model=model)
                 top_label, top_confidence = top_predictions[0]
                 plant_name, disease_name, is_healthy = parse_prediction_label(top_label)
 

@@ -1,28 +1,16 @@
 from pathlib import Path
-from typing import List, Union
+from typing import Callable, List, Union
 
 import cv2
 import numpy as np
 import tensorflow as tf
 from PIL import Image
+from tensorflow.keras.applications import efficientnet, mobilenet_v2, mobilenet_v3
+
+from src.constants import CLASS_NAMES, TARGET_IMAGE_SIZE
 
 DEFAULT_MODEL_NAME = "plant_disease_cnn_model.keras"
 DEFAULT_MODEL_PATH = Path(__file__).resolve().parents[1] / "models" / DEFAULT_MODEL_NAME
-CLASS_NAMES: List[str] = [
-    'Apple___Apple_scab', 'Apple___Black_rot', 'Apple___Cedar_apple_rust', 'Apple___healthy',
-    'Blueberry___healthy', 'Cherry_(including_sour)___Powdery_mildew', 'Cherry_(including_sour)___healthy',
-    'Corn_(maize)___Cercospora_leaf_spot Gray_leaf_spot', 'Corn_(maize)___Common_rust_',
-    'Corn_(maize)___Northern_Leaf_Blight', 'Corn_(maize)___healthy', 'Grape___Black_rot',
-    'Grape___Esca_(Black_Measles)', 'Grape___Leaf_blight_(Isariopsis_Leaf_Spot)', 'Grape___healthy',
-    'Orange___Haunglongbing_(Citrus_greening)', 'Peach___Bacterial_spot', 'Peach___healthy',
-    'Pepper,_bell___Bacterial_spot', 'Pepper,_bell___healthy', 'Potato___Early_blight',
-    'Potato___Late_blight', 'Potato___healthy', 'Raspberry___healthy', 'Soybean___healthy',
-    'Squash___Powdery_mildew', 'Strawberry___Leaf_scorch', 'Strawberry___healthy',
-    'Tomato___Bacterial_spot', 'Tomato___Early_blight', 'Tomato___Late_blight', 'Tomato___Leaf_Mold',
-    'Tomato___Septoria_leaf_spot', 'Tomato___Spider_mites Two-spotted_spider_mite',
-    'Tomato___Target_Spot', 'Tomato___Tomato_Yellow_Leaf_Curl_Virus', 'Tomato___Tomato_mosaic_virus',
-    'Tomato___healthy'
-]
 
 
 def get_model_path(model_path: Union[str, Path] = DEFAULT_MODEL_PATH) -> Path:
@@ -32,7 +20,27 @@ def get_model_path(model_path: Union[str, Path] = DEFAULT_MODEL_PATH) -> Path:
     return path
 
 
-def preprocess_image(image_input: Union[str, Path, Image.Image], target_size: tuple[int, int] = (224, 224)) -> np.ndarray:
+def get_model_preprocessing(model: tf.keras.Model) -> Callable[[np.ndarray], np.ndarray]:
+    def scan_model_layers(layer_list):
+        for layer in layer_list:
+            layer_name = getattr(layer, 'name', '').lower()
+            if 'efficientnet' in layer_name:
+                return efficientnet.preprocess_input
+            if 'mobilenetv3' in layer_name:
+                return mobilenet_v3.preprocess_input
+            if 'mobilenetv2' in layer_name:
+                return mobilenet_v2.preprocess_input
+            if isinstance(layer, tf.keras.Model):
+                nested = scan_model_layers(layer.layers)
+                if nested:
+                    return nested
+        return None
+
+    preprocess_fn = scan_model_layers(model.layers)
+    return preprocess_fn if preprocess_fn is not None else lambda x: x / 255.0
+
+
+def preprocess_image(image_input: Union[str, Path, Image.Image], target_size: tuple[int, int] = TARGET_IMAGE_SIZE, model: tf.keras.Model | None = None) -> np.ndarray:
     if isinstance(image_input, (str, Path)):
         path = Path(image_input)
         if not path.exists():
@@ -47,7 +55,12 @@ def preprocess_image(image_input: Union[str, Path, Image.Image], target_size: tu
         raise TypeError("Unsupported image input type. Provide a file path or PIL.Image.Image.")
 
     image = cv2.resize(image, target_size)
-    image = image.astype("float32") / 255.0
+    image = image.astype("float32")
+    if model is not None:
+        preprocessing_fn = get_model_preprocessing(model)
+        image = preprocessing_fn(image)
+    else:
+        image /= 255.0
     return image.reshape(1, target_size[0], target_size[1], 3)
 
 
@@ -76,7 +89,7 @@ def predict(image_input: Union[str, Path, Image.Image], model: tf.keras.Model | 
 def predict_with_confidence(image_input: Union[str, Path, Image.Image], model: tf.keras.Model | None = None, top_k: int = 3):
     if model is None:
         model = load_model()
-    features = preprocess_image(image_input)
+    features = preprocess_image(image_input, model=model)
     probabilities = model.predict(features)[0]
     top_indices = np.argsort(probabilities)[::-1][:top_k]
     top_predictions = [
@@ -144,7 +157,7 @@ def predict_with_gradcam(image_input: Union[str, Path, Image.Image], model: tf.k
     else:
         original_image = image_input.convert('RGB')
 
-    features = preprocess_image(original_image)
+    features = preprocess_image(original_image, model=model)
     probabilities = model.predict(features)[0]
     top_indices = np.argsort(probabilities)[::-1][:top_k]
     top_predictions = [

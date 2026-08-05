@@ -1,7 +1,8 @@
 from tensorflow.keras import layers, models
+from src.constants import NUM_CLASSES
 
 
-def build_cnn_model(input_shape=(224, 224, 3), num_classes=40):
+def build_cnn_model(input_shape=(224, 224, 3), num_classes=NUM_CLASSES):
     model = models.Sequential([
         layers.Input(shape=input_shape),
         layers.Conv2D(32, (3, 3), activation="relu"),
