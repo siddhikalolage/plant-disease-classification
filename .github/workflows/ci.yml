@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Check Python syntax
+        run: python -m compileall app src tests
+      - name: Validate notebooks
+        run: |
+          python -m pip install --upgrade pip
+          pip install nbformat
+          python -c "import nbformat; [nbformat.read(open(path, 'r', encoding='utf-8'), as_version=4) for path in ['notebooks/01_data_exploration.ipynb','notebooks/02_model_training.ipynb','notebooks/03_model_evaluation.ipynb']]"
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Run unit tests
+        run: pytest --maxfail=1 --disable-warnings -q

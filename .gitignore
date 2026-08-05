@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Distribution
+build/
+dist/
+*.egg-info/
+
+# Editor files
+.DS_Store
+Thumbs.db
+
+# Model artifacts
+*.keras
+*.h5
+*.ckpt
+*.pth
+
+# Logs
+*.log
+
+# OS-generated files
+*.tmp
+*.swp
