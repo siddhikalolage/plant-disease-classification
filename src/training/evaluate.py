@@ -66,7 +66,7 @@ def compute_per_class_accuracy(conf_matrix, labels):
 def compute_roc_auc(y_true, probabilities, labels):
     n_classes = len(labels)
     if n_classes < 2:
-        return {'roc_auc': None}
+        return {'roc_auc_macro': None, 'roc_auc_weighted': None}
 
     y_true_binarized = label_binarize(y_true, classes=list(range(n_classes)))
     if probabilities.shape[1] != n_classes:
@@ -79,6 +79,14 @@ def compute_roc_auc(y_true, probabilities, labels):
         macro_roc_auc = None
         weighted_roc_auc = None
     return {'roc_auc_macro': macro_roc_auc, 'roc_auc_weighted': weighted_roc_auc}
+
+
+def compute_top_k_accuracy(y_true, probabilities, k=3):
+    if probabilities.ndim != 2:
+        raise ValueError('Probabilities must be a 2D array with shape (n_samples, n_classes).')
+    top_k_preds = np.argsort(probabilities, axis=1)[:, ::-1][:, :k]
+    correct = np.any(top_k_preds == y_true[:, np.newaxis], axis=1)
+    return float(np.mean(correct))
 
 
 def get_misclassified_examples(generator, y_true, y_pred, probabilities, top_n=10):
@@ -151,6 +159,7 @@ def evaluate_generator(model, generator, top_n_misclassified=10, bins=10):
 
     metrics = compute_classification_metrics(y_true, y_pred)
     metrics.update(compute_roc_auc(y_true, probabilities, labels))
+    metrics['top_3_accuracy'] = compute_top_k_accuracy(y_true, probabilities, k=3)
     cm = confusion_matrix(y_true, y_pred)
     metrics['per_class_accuracy'] = compute_per_class_accuracy(cm, labels)
     metrics['classification_report'] = classification_report(

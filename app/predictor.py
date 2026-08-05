@@ -78,10 +78,14 @@ def human_readable_label(label: str) -> str:
     return f"{plant_text} — {disease_text}" if disease else plant_text
 
 
-def predict(image_input: Union[str, Path, Image.Image], model: tf.keras.Model | None = None) -> int:
+def predict(
+    image_input: Union[str, Path, Image.Image],
+    model: tf.keras.Model | None = None,
+    model_path: Union[str, Path] | None = None,
+) -> int:
     if model is None:
-        model = load_model()
-    features = preprocess_image(image_input)
+        model = load_model(model_path) if model_path is not None else load_model()
+    features = preprocess_image(image_input, model=model)
     prediction = np.argmax(model.predict(features), axis=-1)[0]
     return int(prediction)
 
@@ -116,12 +120,30 @@ def find_last_conv_layer(model: tf.keras.Model) -> str:
     return last_conv_name
 
 
+def get_layer_by_name_recursive(model: tf.keras.Model, layer_name: str) -> tf.keras.layers.Layer | None:
+    try:
+        return model.get_layer(layer_name)
+    except (ValueError, AttributeError):
+        pass
+
+    for layer in model.layers:
+        if isinstance(layer, tf.keras.Model):
+            nested = get_layer_by_name_recursive(layer, layer_name)
+            if nested is not None:
+                return nested
+    return None
+
+
 def make_gradcam_heatmap(img_array: np.ndarray, model: tf.keras.Model, pred_index: int = None, last_conv_layer_name: str | None = None) -> np.ndarray:
     if last_conv_layer_name is None:
         last_conv_layer_name = find_last_conv_layer(model)
 
+    target_layer = get_layer_by_name_recursive(model, last_conv_layer_name)
+    if target_layer is None:
+        raise ValueError(f"Unable to resolve layer '{last_conv_layer_name}' in the model for Grad-CAM.")
+
     grad_model = tf.keras.models.Model(
-        [model.inputs], [model.get_layer(last_conv_layer_name).output, model.output]
+        [model.inputs], [target_layer.output, model.output]
     )
 
     with tf.GradientTape() as tape:

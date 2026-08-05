@@ -26,6 +26,28 @@ https://www.kaggle.com/datasets/vipoooool/new-plant-diseases-dataset
 - Achieved approximately 90% classification accuracy
 - Improved robustness using data augmentation techniques
 
+## Benchmarking and Evaluation
+- Added benchmark utilities in `src/training/benchmark.py`
+- Supports parameter count, estimated model size, inference latency, and optional validation metrics
+- Run from the repo root with `PYTHONPATH=. python -c "from src.training.benchmark import build_benchmark_suite; ..."`
+- Example usage:
+
+```bash
+set PYTHONPATH=.
+python -c "from src.training.benchmark import build_benchmark_suite; from src.inference.predict import build_baseline_cnn_model; results = build_benchmark_suite({'CNN': build_baseline_cnn_model}); print(results)"
+```
+
+Notebook / analysis script:
+
+- `notebooks/benchmark_analysis.py`: small analysis helper that loads `benchmark_results.csv`, prints a summary, and saves comparison plots to `notebooks/figures/`.
+
+Example run to generate results and analyze:
+
+```bash
+set PYTHONPATH=.
+python scripts/run_benchmarks.py --validation-dir path\to\val --output benchmark_results.csv
+python notebooks/benchmark_analysis.py --input benchmark_results.csv --show
+```
 ## Key Learnings
 - CNN architecture and training
 - Image preprocessing and augmentation
