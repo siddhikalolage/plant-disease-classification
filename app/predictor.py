@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 from typing import Callable, List, Union
 
@@ -6,6 +7,10 @@ import numpy as np
 import tensorflow as tf
 from PIL import Image
 from tensorflow.keras.applications import efficientnet, mobilenet_v2, mobilenet_v3
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
 from src.constants import CLASS_NAMES, TARGET_IMAGE_SIZE
 
@@ -16,7 +21,7 @@ DEFAULT_MODEL_PATH = Path(__file__).resolve().parents[1] / "models" / DEFAULT_MO
 def get_model_path(model_path: Union[str, Path] = DEFAULT_MODEL_PATH) -> Path:
     path = Path(model_path)
     if not path.is_absolute():
-        path = Path.cwd() / path
+        path = ROOT_DIR / path
     return path
 
 

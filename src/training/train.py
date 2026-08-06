@@ -107,7 +107,15 @@ def get_training_callbacks(checkpoint_path="models/plant_disease_cnn_model.keras
     ]
 
 
-def train_model(model: tf.keras.Model, train_generator, valid_generator, epochs: int = 20, callbacks=None):
+def train_model(
+    model: tf.keras.Model,
+    train_generator,
+    valid_generator,
+    epochs: int = 20,
+    callbacks=None,
+    steps_per_epoch: int | None = None,
+    validation_steps: int | None = None,
+):
     if callbacks is None:
         callbacks = get_training_callbacks()
 
@@ -116,6 +124,8 @@ def train_model(model: tf.keras.Model, train_generator, valid_generator, epochs:
         validation_data=valid_generator,
         epochs=epochs,
         callbacks=callbacks,
+        steps_per_epoch=steps_per_epoch,
+        validation_steps=validation_steps,
     )
     return history
 

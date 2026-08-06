@@ -1,8 +1,21 @@
+import sys
+from pathlib import Path
+
 import streamlit as st
 from PIL import Image
 
-from app.predictor import load_model, predict_with_gradcam
-from app.utils import get_asset_path
+ROOT_DIR = Path(__file__).resolve().parents[1]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(ROOT_DIR))
+    from predictor import load_model, predict_with_gradcam
+    from utils import get_asset_path
+else:
+    from app.predictor import load_model, predict_with_gradcam
+    from app.utils import get_asset_path
+
 from src.training.evaluate import (
     build_evaluation_generator,
     evaluate_generator,
@@ -31,7 +44,11 @@ def render_prediction_status(confidence: float, is_healthy: bool) -> None:
 
 @st.cache_resource
 def get_cached_model():
-    return load_model()
+    try:
+        return load_model()
+    except FileNotFoundError:
+        st.warning('No trained model file was found in the models directory. Train a model or place a .keras model there before predicting.')
+        return None
 
 st.sidebar.title('Plant Disease Prediction System for Sustainable Agriculture')
 app_mode = st.sidebar.selectbox('Select page', ['Home', 'Disease Recognition', 'Evaluation'])
@@ -64,6 +81,8 @@ elif app_mode == 'Disease Recognition':
             st.write('### Prediction')
             try:
                 model = get_cached_model()
+                if model is None:
+                    st.stop()
                 _, top_confidence, top_predictions, gradcam_overlay = predict_with_gradcam(uploaded_image, model=model)
                 top_label, top_confidence = top_predictions[0]
                 plant_name, disease_name, is_healthy = parse_prediction_label(top_label)
