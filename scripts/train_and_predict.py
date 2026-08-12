@@ -48,7 +48,7 @@ def main():
     parser.add_argument('--steps-per-epoch', type=int, default=10)
     parser.add_argument('--validation-steps', type=int, default=5)
     parser.add_argument('--batch-size', type=int, default=8)
-    parser.add_argument('--output-model', type=str, default=r'models\plant_disease_cnn_model.keras')
+    parser.add_argument('--output-model', type=str, default=r'models\mobilenet_benchmark_final.keras')
     args = parser.parse_args()
 
     dataset_root = Path(args.dataset_root)
