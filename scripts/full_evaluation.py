@@ -1,4 +1,5 @@
 from pathlib import Path
+import argparse
 import json
 
 import numpy as np
@@ -14,19 +15,15 @@ from sklearn.metrics import (
 from src.training.train import build_training_generators
 
 
-# ============================================================
-# CONFIGURATION
-# ============================================================
-
 DEFAULT_IMAGE_SIZE = (224, 224)
 DEFAULT_BATCH_SIZE = 32
+EXPECTED_NUM_CLASSES = 38
 
 
-# ============================================================
-# HELPERS
-# ============================================================
-
-def load_validation_generator(dataset_root: Path, batch_size: int):
+def load_validation_generator(
+    dataset_root: Path,
+    batch_size: int,
+):
     """Build the validation generator using the project's pipeline."""
 
     train_dir = dataset_root / "train"
@@ -49,7 +46,6 @@ def load_validation_generator(dataset_root: Path, batch_size: int):
         batch_size=batch_size,
     )
 
-    # Evaluation must remain deterministic.
     valid_generator.shuffle = False
     valid_generator.reset()
 
@@ -57,17 +53,23 @@ def load_validation_generator(dataset_root: Path, batch_size: int):
 
 
 def get_class_names(generator):
-    """Recover class names in their numeric class-index order."""
+    """Recover class names in numeric class-index order."""
 
     ordered = sorted(
         generator.class_indices.items(),
         key=lambda item: item[1],
     )
 
-    return [name for name, _ in ordered]
+    return [
+        name
+        for name, _ in ordered
+    ]
 
 
-def predict_full_validation_set(model, generator):
+def predict_full_validation_set(
+    model,
+    generator,
+):
     """Generate predictions for every validation image."""
 
     generator.reset()
@@ -78,7 +80,9 @@ def predict_full_validation_set(model, generator):
         verbose=1,
     )
 
-    probabilities = np.asarray(probabilities)
+    probabilities = np.asarray(
+        probabilities
+    )
 
     y_true = np.asarray(
         generator.classes,
@@ -97,7 +101,11 @@ def predict_full_validation_set(model, generator):
             f"{len(y_pred)} predictions."
         )
 
-    return y_true, y_pred, probabilities
+    return (
+        y_true,
+        y_pred,
+        probabilities,
+    )
 
 
 def calculate_metrics(
@@ -112,22 +120,28 @@ def calculate_metrics(
         y_pred,
     )
 
-    precision_macro, recall_macro, f1_macro, _ = (
-        precision_recall_fscore_support(
-            y_true,
-            y_pred,
-            average="macro",
-            zero_division=0,
-        )
+    (
+        precision_macro,
+        recall_macro,
+        f1_macro,
+        _,
+    ) = precision_recall_fscore_support(
+        y_true,
+        y_pred,
+        average="macro",
+        zero_division=0,
     )
 
-    precision_weighted, recall_weighted, f1_weighted, _ = (
-        precision_recall_fscore_support(
-            y_true,
-            y_pred,
-            average="weighted",
-            zero_division=0,
-        )
+    (
+        precision_weighted,
+        recall_weighted,
+        f1_weighted,
+        _,
+    ) = precision_recall_fscore_support(
+        y_true,
+        y_pred,
+        average="weighted",
+        zero_division=0,
     )
 
     report = classification_report(
@@ -139,18 +153,22 @@ def calculate_metrics(
         zero_division=0,
     )
 
-    metrics = {
+    return {
         "accuracy": float(accuracy),
         "precision_macro": float(precision_macro),
         "recall_macro": float(recall_macro),
         "f1_macro": float(f1_macro),
-        "precision_weighted": float(precision_weighted),
-        "recall_weighted": float(recall_weighted),
-        "f1_weighted": float(f1_weighted),
+        "precision_weighted": float(
+            precision_weighted
+        ),
+        "recall_weighted": float(
+            recall_weighted
+        ),
+        "f1_weighted": float(
+            f1_weighted
+        ),
         "classification_report": report,
     }
-
-    return metrics
 
 
 def calculate_confusion_matrix(
@@ -158,15 +176,13 @@ def calculate_confusion_matrix(
     y_pred,
     class_names,
 ):
-    """Create the complete 38 x 38 confusion matrix."""
+    """Create the complete confusion matrix."""
 
-    matrix = confusion_matrix(
+    return confusion_matrix(
         y_true,
         y_pred,
         labels=list(range(len(class_names))),
     )
-
-    return matrix
 
 
 def get_worst_classes(
@@ -174,12 +190,15 @@ def get_worst_classes(
     class_names,
     limit=10,
 ):
-    """Return the classes with the weakest F1 scores."""
+    """Return classes with the weakest F1 scores."""
 
     results = []
 
     for class_name in class_names:
-        values = report.get(class_name)
+
+        values = report.get(
+            class_name
+        )
 
         if not values:
             continue
@@ -187,10 +206,18 @@ def get_worst_classes(
         results.append(
             {
                 "class": class_name,
-                "precision": float(values["precision"]),
-                "recall": float(values["recall"]),
-                "f1": float(values["f1-score"]),
-                "support": int(values["support"]),
+                "precision": float(
+                    values["precision"]
+                ),
+                "recall": float(
+                    values["recall"]
+                ),
+                "f1": float(
+                    values["f1-score"]
+                ),
+                "support": int(
+                    values["support"]
+                ),
             }
         )
 
@@ -206,13 +233,17 @@ def get_top_confusions(
     class_names,
     limit=15,
 ):
-    """Find the strongest off-diagonal confusion pairs."""
+    """Find strongest off-diagonal confusion pairs."""
 
     pairs = []
 
-    for true_index in range(len(class_names)):
+    for true_index in range(
+        len(class_names)
+    ):
 
-        for predicted_index in range(len(class_names)):
+        for predicted_index in range(
+            len(class_names)
+        ):
 
             if true_index == predicted_index:
                 continue
@@ -229,8 +260,12 @@ def get_top_confusions(
 
             pairs.append(
                 {
-                    "true_class": class_names[true_index],
-                    "predicted_class": class_names[predicted_index],
+                    "true_class": class_names[
+                        true_index
+                    ],
+                    "predicted_class": class_names[
+                        predicted_index
+                    ],
                     "count": count,
                 }
             )
@@ -243,7 +278,10 @@ def get_top_confusions(
     return pairs[:limit]
 
 
-def save_json(data, output_path: Path):
+def save_json(
+    data,
+    output_path: Path,
+):
     """Save structured evaluation results as JSON."""
 
     output_path.parent.mkdir(
@@ -255,6 +293,7 @@ def save_json(data, output_path: Path):
         "w",
         encoding="utf-8",
     ) as file:
+
         json.dump(
             data,
             file,
@@ -262,21 +301,69 @@ def save_json(data, output_path: Path):
         )
 
 
-# ============================================================
-# MAIN
-# ============================================================
-
 def main():
 
-    model_path = Path(
-        "models/mobilenet_benchmark_final.keras"
+    parser = argparse.ArgumentParser(
+        description=(
+            "Perform complete evaluation of "
+            "a plant disease classifier."
+        )
     )
 
-    dataset_root = Path(
-        r"C:\Users\siddh\Downloads\plant dataset\New Plant Diseases Dataset(Augmented)\New Plant Diseases Dataset(Augmented)"
+    parser.add_argument(
+        "--model",
+        type=Path,
+        required=True,
+        help="Path to trained .keras model.",
     )
 
-    output_dir = Path("reports")
+    parser.add_argument(
+        "--dataset-root",
+        type=Path,
+        required=True,
+        help=(
+            "Dataset root containing "
+            "train/ and valid/ directories."
+        ),
+    )
+
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("reports"),
+        help="Directory for evaluation reports.",
+    )
+
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=DEFAULT_BATCH_SIZE,
+        help="Validation batch size.",
+    )
+
+    args = parser.parse_args()
+
+    model_path = args.model
+    dataset_root = args.dataset_root
+    output_dir = args.output_dir
+
+    train_dir = dataset_root / "train"
+    valid_dir = dataset_root / "valid"
+
+    if not model_path.is_file():
+        raise FileNotFoundError(
+            f"Model not found: {model_path}"
+        )
+
+    if not train_dir.is_dir():
+        raise FileNotFoundError(
+            f"Training directory not found: {train_dir}"
+        )
+
+    if not valid_dir.is_dir():
+        raise FileNotFoundError(
+            f"Validation directory not found: {valid_dir}"
+        )
 
     print("=" * 70)
     print("FULL PLANT DISEASE MODEL EVALUATION")
@@ -292,11 +379,6 @@ def main():
     # LOAD MODEL
     # --------------------------------------------------------
 
-    if not model_path.is_file():
-        raise FileNotFoundError(
-            f"Model not found: {model_path}"
-        )
-
     print("\nLoading model...")
 
     model = tf.keras.models.load_model(
@@ -304,12 +386,14 @@ def main():
     )
 
     print(
-        f"Model output: {model.output_shape}"
+        f"Model output: "
+        f"{model.output_shape}"
     )
 
-    if model.output_shape[-1] != 38:
+    if model.output_shape[-1] != EXPECTED_NUM_CLASSES:
         raise ValueError(
-            "Expected a 38-class classifier, "
+            f"Expected a "
+            f"{EXPECTED_NUM_CLASSES}-class classifier, "
             f"but received {model.output_shape}."
         )
 
@@ -317,11 +401,13 @@ def main():
     # LOAD VALIDATION DATA
     # --------------------------------------------------------
 
-    print("\nLoading validation generator...")
+    print(
+        "\nLoading validation generator..."
+    )
 
     generator = load_validation_generator(
         dataset_root=dataset_root,
-        batch_size=DEFAULT_BATCH_SIZE,
+        batch_size=args.batch_size,
     )
 
     class_names = get_class_names(
@@ -329,31 +415,46 @@ def main():
     )
 
     print(
-        f"Validation images: {generator.samples}"
+        f"Validation images: "
+        f"{generator.samples}"
     )
 
     print(
-        f"Classes: {len(class_names)}"
+        f"Classes: "
+        f"{len(class_names)}"
     )
+
+    if len(class_names) != EXPECTED_NUM_CLASSES:
+        raise ValueError(
+            f"Expected "
+            f"{EXPECTED_NUM_CLASSES} classes, "
+            f"but found {len(class_names)}."
+        )
 
     # --------------------------------------------------------
     # PREDICTION
     # --------------------------------------------------------
 
-    print("\nGenerating predictions...")
+    print(
+        "\nGenerating predictions..."
+    )
 
-    y_true, y_pred, probabilities = (
-        predict_full_validation_set(
-            model=model,
-            generator=generator,
-        )
+    (
+        y_true,
+        y_pred,
+        probabilities,
+    ) = predict_full_validation_set(
+        model=model,
+        generator=generator,
     )
 
     # --------------------------------------------------------
     # METRICS
     # --------------------------------------------------------
 
-    print("\nCalculating metrics...")
+    print(
+        "\nCalculating metrics..."
+    )
 
     metrics = calculate_metrics(
         y_true=y_true,
@@ -370,13 +471,11 @@ def main():
     worst_classes = get_worst_classes(
         metrics["classification_report"],
         class_names,
-        limit=10,
     )
 
     top_confusions = get_top_confusions(
         confusion,
         class_names,
-        limit=15,
     )
 
     # --------------------------------------------------------
@@ -388,31 +487,38 @@ def main():
     print("=" * 70)
 
     print(
-        f"Accuracy:          {metrics['accuracy']:.4f}"
+        f"Accuracy:           "
+        f"{metrics['accuracy']:.4f}"
     )
 
     print(
-        f"Macro Precision:   {metrics['precision_macro']:.4f}"
+        f"Macro Precision:    "
+        f"{metrics['precision_macro']:.4f}"
     )
 
     print(
-        f"Macro Recall:      {metrics['recall_macro']:.4f}"
+        f"Macro Recall:       "
+        f"{metrics['recall_macro']:.4f}"
     )
 
     print(
-        f"Macro F1:          {metrics['f1_macro']:.4f}"
+        f"Macro F1:           "
+        f"{metrics['f1_macro']:.4f}"
     )
 
     print(
-        f"Weighted Precision:{metrics['precision_weighted']:.4f}"
+        f"Weighted Precision: "
+        f"{metrics['precision_weighted']:.4f}"
     )
 
     print(
-        f"Weighted Recall:   {metrics['recall_weighted']:.4f}"
+        f"Weighted Recall:    "
+        f"{metrics['recall_weighted']:.4f}"
     )
 
     print(
-        f"Weighted F1:       {metrics['f1_weighted']:.4f}"
+        f"Weighted F1:        "
+        f"{metrics['f1_weighted']:.4f}"
     )
 
     # --------------------------------------------------------
@@ -465,15 +571,33 @@ def main():
     complete_report = {
         "model": str(model_path),
         "dataset": str(dataset_root),
-        "validation_samples": int(generator.samples),
-        "num_classes": len(class_names),
-        "accuracy": metrics["accuracy"],
-        "precision_macro": metrics["precision_macro"],
-        "recall_macro": metrics["recall_macro"],
-        "f1_macro": metrics["f1_macro"],
-        "precision_weighted": metrics["precision_weighted"],
-        "recall_weighted": metrics["recall_weighted"],
-        "f1_weighted": metrics["f1_weighted"],
+        "validation_samples": int(
+            generator.samples
+        ),
+        "num_classes": len(
+            class_names
+        ),
+        "accuracy": metrics[
+            "accuracy"
+        ],
+        "precision_macro": metrics[
+            "precision_macro"
+        ],
+        "recall_macro": metrics[
+            "recall_macro"
+        ],
+        "f1_macro": metrics[
+            "f1_macro"
+        ],
+        "precision_weighted": metrics[
+            "precision_weighted"
+        ],
+        "recall_weighted": metrics[
+            "recall_weighted"
+        ],
+        "f1_weighted": metrics[
+            "f1_weighted"
+        ],
         "class_names": class_names,
         "classification_report": metrics[
             "classification_report"
