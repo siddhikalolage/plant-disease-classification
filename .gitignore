@@ -27,6 +27,9 @@ Thumbs.db
 *.ckpt
 *.pth
 
+# Keep only the production model used by the Streamlit demo
+!models/mobilenet_benchmark_final.keras
+
 # Logs
 *.log
 
