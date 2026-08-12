@@ -33,3 +33,6 @@ Thumbs.db
 # OS-generated files
 *.tmp
 *.swp
+
+# Generated subset dataset
+models/subset_dataset/

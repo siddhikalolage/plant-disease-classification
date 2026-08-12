@@ -14,7 +14,7 @@ from pprint import pprint
 
 from src.training.benchmark import benchmark_model, save_benchmark_results
 from src.training.evaluate import build_evaluation_generator
-from src.inference.predict import (
+from src.training.train import (
     build_baseline_cnn_model,
     build_efficientnetb0_model,
     build_mobilenetv3_model,
