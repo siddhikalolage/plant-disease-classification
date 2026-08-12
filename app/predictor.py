@@ -1,201 +1,302 @@
-import sys
 from pathlib import Path
-from typing import Callable, List, Union
+from typing import List, Union
 
 import cv2
 import numpy as np
 import tensorflow as tf
 from PIL import Image
-from tensorflow.keras.applications import efficientnet, mobilenet_v2, mobilenet_v3
-
-ROOT_DIR = Path(__file__).resolve().parents[1]
-if str(ROOT_DIR) not in sys.path:
-    sys.path.insert(0, str(ROOT_DIR))
 
 from src.constants import CLASS_NAMES, TARGET_IMAGE_SIZE
 
-DEFAULT_MODEL_NAME = "plant_disease_cnn_model.keras"
-DEFAULT_MODEL_PATH = Path(__file__).resolve().parents[1] / "models" / DEFAULT_MODEL_NAME
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
+
+DEFAULT_MODEL_NAME = "mobilenet_benchmark_final.keras"
+DEFAULT_MODEL_PATH = ROOT_DIR / "models" / DEFAULT_MODEL_NAME
 
 
-def get_model_path(model_path: Union[str, Path] = DEFAULT_MODEL_PATH) -> Path:
+ImageInput = Union[str, Path, Image.Image]
+
+
+def get_model_path(
+    model_path: Union[str, Path] = DEFAULT_MODEL_PATH,
+) -> Path:
+    """Resolve the model path relative to the project root."""
+
     path = Path(model_path)
+
     if not path.is_absolute():
         path = ROOT_DIR / path
+
     return path
 
 
-def get_model_preprocessing(model: tf.keras.Model) -> Callable[[np.ndarray], np.ndarray]:
-    def scan_model_layers(layer_list):
-        for layer in layer_list:
-            layer_name = getattr(layer, 'name', '').lower()
-            if 'efficientnet' in layer_name:
-                return efficientnet.preprocess_input
-            if 'mobilenetv3' in layer_name:
-                return mobilenet_v3.preprocess_input
-            if 'mobilenetv2' in layer_name:
-                return mobilenet_v2.preprocess_input
-            if isinstance(layer, tf.keras.Model):
-                nested = scan_model_layers(layer.layers)
-                if nested:
-                    return nested
-        return None
+def load_model(
+    model_path: Union[str, Path] = DEFAULT_MODEL_PATH,
+) -> tf.keras.Model:
+    """Load the trained plant-disease classifier."""
 
-    preprocess_fn = scan_model_layers(model.layers)
-    return preprocess_fn if preprocess_fn is not None else lambda x: x / 255.0
-
-
-def preprocess_image(image_input: Union[str, Path, Image.Image], target_size: tuple[int, int] = TARGET_IMAGE_SIZE, model: tf.keras.Model | None = None) -> np.ndarray:
-    if isinstance(image_input, (str, Path)):
-        path = Path(image_input)
-        if not path.exists():
-            raise FileNotFoundError(f"Image not found at {image_input}")
-        image = cv2.imread(str(path))
-        if image is None:
-            raise FileNotFoundError(f"Unable to read image at {image_input}")
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    elif isinstance(image_input, Image.Image):
-        image = np.array(image_input.convert("RGB"))
-    else:
-        raise TypeError("Unsupported image input type. Provide a file path or PIL.Image.Image.")
-
-    image = cv2.resize(image, target_size)
-    image = image.astype("float32")
-    if model is not None:
-        preprocessing_fn = get_model_preprocessing(model)
-        image = preprocessing_fn(image)
-    else:
-        image /= 255.0
-    return image.reshape(1, target_size[0], target_size[1], 3)
-
-
-def load_model(model_path: Union[str, Path] = DEFAULT_MODEL_PATH) -> tf.keras.Model:
     path = get_model_path(model_path)
+
     if not path.exists():
-        raise FileNotFoundError(f"Model not found at {path}")
-    return tf.keras.models.load_model(str(path))
+        raise FileNotFoundError(
+            f"Model not found at: {path}"
+        )
+
+    model = tf.keras.models.load_model(
+        str(path)
+    )
+
+    if model.output_shape[-1] != len(CLASS_NAMES):
+        raise ValueError(
+            "Model/class mapping mismatch. "
+            f"Model outputs {model.output_shape[-1]} classes, "
+            f"but CLASS_NAMES contains {len(CLASS_NAMES)} classes."
+        )
+
+    return model
 
 
-def human_readable_label(label: str) -> str:
-    plant, _, disease = label.partition('___')
-    plant_text = plant.replace('_', ' ').title()
-    disease_text = disease.replace('_', ' ').title()
-    return f"{plant_text} — {disease_text}" if disease else plant_text
+def _load_image(
+    image_input: ImageInput,
+) -> Image.Image:
+    """Load an image from a path or PIL image."""
+
+    if isinstance(image_input, Image.Image):
+        return image_input.convert("RGB")
+
+    path = Path(image_input)
+
+    if not path.exists():
+        raise FileNotFoundError(
+            f"Image not found at: {path}"
+        )
+
+    image = Image.open(path)
+
+    return image.convert("RGB")
+
+
+def preprocess_image(
+    image_input: ImageInput,
+    target_size: tuple[int, int] = TARGET_IMAGE_SIZE,
+) -> np.ndarray:
+    """
+    Prepare an image exactly like the validation pipeline.
+
+    The final MobileNetV3 model was evaluated using images
+    scaled from [0, 255] to [0, 1] by ImageDataGenerator.
+
+    The model itself contains its MobileNet preprocessing,
+    so we only perform the generator-side /255 scaling here.
+    """
+
+    image = _load_image(image_input)
+
+    image = image.resize(
+        target_size,
+        Image.Resampling.BILINEAR,
+    )
+
+    image_array = np.asarray(
+        image,
+        dtype=np.float32,
+    )
+
+    image_array /= 255.0
+
+    return np.expand_dims(
+        image_array,
+        axis=0,
+    )
+
+
+def predict_probabilities(
+    image_input: ImageInput,
+    model: tf.keras.Model | None = None,
+    model_path: Union[str, Path] | None = None,
+) -> np.ndarray:
+    """Return the complete 38-class probability vector."""
+
+    if model is None:
+
+        if model_path is not None:
+            model = load_model(model_path)
+
+        else:
+            model = load_model()
+
+    image_array = preprocess_image(
+        image_input
+    )
+
+    probabilities = model.predict(
+        image_array,
+        verbose=0,
+    )[0]
+
+    return probabilities
+
+
+def human_readable_label(
+    label: str,
+) -> str:
+    """Convert dataset class names into readable labels."""
+
+    plant, separator, disease = label.partition(
+        "___"
+    )
+
+    plant_text = (
+        plant
+        .replace("_", " ")
+        .title()
+    )
+
+    if not separator:
+        return plant_text
+
+    disease_text = (
+        disease
+        .replace("_", " ")
+        .title()
+    )
+
+    return f"{plant_text} — {disease_text}"
+
+
+def get_top_predictions(
+    probabilities: np.ndarray,
+    top_k: int = 5,
+):
+    """Return the top-k predictions."""
+
+    top_k = max(
+        1,
+        min(
+            top_k,
+            len(probabilities),
+        ),
+    )
+
+    indices = np.argsort(
+        probabilities
+    )[::-1][:top_k]
+
+    predictions = []
+
+    for index in indices:
+
+        predictions.append(
+            {
+                "index": int(index),
+                "class_name": CLASS_NAMES[
+                    int(index)
+                ],
+                "label": human_readable_label(
+                    CLASS_NAMES[int(index)]
+                ),
+                "confidence": float(
+                    probabilities[int(index)]
+                ),
+            }
+        )
+
+    return predictions
+
+
+def confidence_status(
+    confidence: float,
+) -> str:
+    """
+    Convert confidence into an application-level status.
+
+    Note:
+    This is a UI confidence rule, not a calibrated probability.
+    """
+
+    if confidence >= 0.90:
+        return "high"
+
+    if confidence >= 0.70:
+        return "medium"
+
+    return "low"
+
+
+def predict_with_confidence(
+    image_input: ImageInput,
+    model: tf.keras.Model | None = None,
+    model_path: Union[str, Path] | None = None,
+    top_k: int = 5,
+):
+    """
+    Return the primary prediction plus Top-K alternatives.
+    """
+
+    probabilities = predict_probabilities(
+        image_input=image_input,
+        model=model,
+        model_path=model_path,
+    )
+
+    predictions = get_top_predictions(
+        probabilities,
+        top_k=top_k,
+    )
+
+    best = predictions[0]
+
+    return (
+        best["index"],
+        best["confidence"],
+        predictions,
+        confidence_status(
+            best["confidence"]
+        ),
+    )
 
 
 def predict(
-    image_input: Union[str, Path, Image.Image],
+    image_input: ImageInput,
     model: tf.keras.Model | None = None,
     model_path: Union[str, Path] | None = None,
 ) -> int:
-    if model is None:
-        model = load_model(model_path) if model_path is not None else load_model()
-    features = preprocess_image(image_input, model=model)
-    prediction = np.argmax(model.predict(features), axis=-1)[0]
-    return int(prediction)
+    """Return the predicted class index."""
 
-
-def predict_with_confidence(image_input: Union[str, Path, Image.Image], model: tf.keras.Model | None = None, top_k: int = 3):
-    if model is None:
-        model = load_model()
-    features = preprocess_image(image_input, model=model)
-    probabilities = model.predict(features)[0]
-    top_indices = np.argsort(probabilities)[::-1][:top_k]
-    top_predictions = [
-        (human_readable_label(CLASS_NAMES[int(idx)]), float(probabilities[int(idx)]))
-        for idx in top_indices
-    ]
-    return int(top_indices[0]), float(probabilities[int(top_indices[0])]), top_predictions
-
-
-def find_last_conv_layer(model: tf.keras.Model) -> str:
-    def scan_layers(layers_list):
-        for layer in reversed(layers_list):
-            if isinstance(layer, (tf.keras.layers.Conv2D, tf.keras.layers.DepthwiseConv2D)):
-                return layer.name
-            if isinstance(layer, tf.keras.Model):
-                nested = scan_layers(layer.layers)
-                if nested:
-                    return nested
-        return None
-
-    last_conv_name = scan_layers(model.layers)
-    if not last_conv_name:
-        raise ValueError('Unable to find a convolutional layer in the model for Grad-CAM.')
-    return last_conv_name
-
-
-def get_layer_by_name_recursive(model: tf.keras.Model, layer_name: str) -> tf.keras.layers.Layer | None:
-    try:
-        return model.get_layer(layer_name)
-    except (ValueError, AttributeError):
-        pass
-
-    for layer in model.layers:
-        if isinstance(layer, tf.keras.Model):
-            nested = get_layer_by_name_recursive(layer, layer_name)
-            if nested is not None:
-                return nested
-    return None
-
-
-def make_gradcam_heatmap(img_array: np.ndarray, model: tf.keras.Model, pred_index: int = None, last_conv_layer_name: str | None = None) -> np.ndarray:
-    if last_conv_layer_name is None:
-        last_conv_layer_name = find_last_conv_layer(model)
-
-    target_layer = get_layer_by_name_recursive(model, last_conv_layer_name)
-    if target_layer is None:
-        raise ValueError(f"Unable to resolve layer '{last_conv_layer_name}' in the model for Grad-CAM.")
-
-    grad_model = tf.keras.models.Model(
-        [model.inputs], [target_layer.output, model.output]
+    prediction_index, _, _, _ = (
+        predict_with_confidence(
+            image_input=image_input,
+            model=model,
+            model_path=model_path,
+            top_k=1,
+        )
     )
 
-    with tf.GradientTape() as tape:
-        conv_outputs, predictions = grad_model(img_array)
-        if pred_index is None:
-            pred_index = tf.argmax(predictions[0])
-        loss = predictions[:, pred_index]
-
-    grads = tape.gradient(loss, conv_outputs)
-    pooled_grads = tf.reduce_mean(grads, axis=(0, 1, 2))
-    conv_outputs = conv_outputs[0]
-    heatmap = tf.reduce_sum(tf.multiply(conv_outputs, pooled_grads), axis=-1)
-    heatmap = tf.maximum(heatmap, 0) / (tf.reduce_max(heatmap) + 1e-9)
-    return heatmap.numpy()
+    return prediction_index
 
 
-def overlay_gradcam(original_image: Image.Image, heatmap: np.ndarray, alpha: float = 0.4) -> Image.Image:
-    heatmap = np.uint8(255 * heatmap)
-    heatmap = cv2.applyColorMap(heatmap, cv2.COLORMAP_JET)
+def get_class_name(
+    index: int,
+) -> str:
+    """Return the raw class name for a class index."""
 
-    original = np.array(original_image.convert('RGB'))
-    heatmap = cv2.resize(heatmap, (original.shape[1], original.shape[0]))
-    overlay = cv2.addWeighted(heatmap, alpha, original, 1 - alpha, 0)
-    return Image.fromarray(overlay)
+    if 0 <= index < len(CLASS_NAMES):
+        return CLASS_NAMES[index]
 
-
-def predict_with_gradcam(image_input: Union[str, Path, Image.Image], model: tf.keras.Model | None = None, top_k: int = 3):
-    if model is None:
-        model = load_model()
-
-    if isinstance(image_input, (str, Path)):
-        original_image = Image.open(image_input).convert('RGB')
-    else:
-        original_image = image_input.convert('RGB')
-
-    features = preprocess_image(original_image, model=model)
-    probabilities = model.predict(features)[0]
-    top_indices = np.argsort(probabilities)[::-1][:top_k]
-    top_predictions = [
-        (human_readable_label(CLASS_NAMES[int(idx)]), float(probabilities[int(idx)]))
-        for idx in top_indices
-    ]
-
-    heatmap = make_gradcam_heatmap(features, model, pred_index=int(top_indices[0]))
-    overlay = overlay_gradcam(original_image, heatmap)
-    return int(top_indices[0]), float(probabilities[int(top_indices[0])]), top_predictions, overlay
+    return "Unknown"
 
 
-def get_class_name(index: int) -> str:
-    return CLASS_NAMES[index] if 0 <= index < len(CLASS_NAMES) else "Unknown"
+def predict_from_path(
+    image_path: Union[str, Path],
+    model_path: Union[str, Path] = DEFAULT_MODEL_PATH,
+):
+    """
+    Convenience function for command-line or application use.
+    """
+
+    return predict_with_confidence(
+        image_input=image_path,
+        model_path=model_path,
+        top_k=5,
+    )
