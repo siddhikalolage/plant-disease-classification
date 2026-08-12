@@ -36,3 +36,6 @@ Thumbs.db
 
 # Generated subset dataset
 models/subset_dataset/
+
+# Generated benchmark output
+benchmark_results.csv
