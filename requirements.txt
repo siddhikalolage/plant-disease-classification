@@ -1,9 +1,4 @@
 streamlit
-tensorflow
-opencv-python
-numpy
+tensorflow==2.20.0
+numpy==2.1.2
 pillow
-matplotlib
-scikit-learn
-pytest
-nbformat

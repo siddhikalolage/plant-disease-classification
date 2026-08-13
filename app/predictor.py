@@ -1,7 +1,6 @@
 from pathlib import Path
 from typing import List, Union
 
-import cv2
 import numpy as np
 import tensorflow as tf
 from PIL import Image
